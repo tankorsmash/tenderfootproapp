@@ -26,31 +26,97 @@ from google.appengine.api import users
 JINJA_ENVIRONMENT = jinja2.Environment(
     loader=jinja2.FileSystemLoader(os.path.dirname(__file__)))
 
+USERS = { } # user_id : location
+
+class Location(object):
+    def __init__(self, name, description=None):
+        self.name = name
+        if description:
+            self.description = description
+        else:
+            self.description = "This room is almost undescribable."
+        self.exits = []
+
+    def add_exit(self, exit):
+        self.exits.append(exit)
+
+class Exit(object):
+    def __init__(self, target_loc, command, description=None):
+        if not isinstance(target_loc, Location):
+            raise Exception("wrong type, needs to be Location")
+        self.target_loc = target_loc
+        if description:
+            self.description = "This doorway is nearly incomparable."
+        else:
+            self.description = description
+        self.command = command
+
+
+home_base = Location("Home Base", "This is your home")
+kitchen = Location("Your Kitchen", "This is where you cook your food")
+
+home_to_kitchen = Exit(kitchen, "go kitchen", "a plain doorway to the kitchen")
+home_base.add_exit(home_to_kitchen)
+
+kitchen_to_home = Exit(home_base, "go home", "a doorway leading to your home base")
+kitchen.add_exit(kitchen_to_home)
+
+
+LOCATION_MAP = [ home_base, kitchen]
+
+
 class TextRequestHandler(webapp2.RequestHandler):
-	def get(self):
-		user = users.get_current_user()
+    def look(self):
+        self.response.write("Name: "+self.request.current_location.name+"</br>")
+        self.response.write("Desc: "+self.request.current_location.description+"</br>")
+        for exit in self.request.current_location.exits:
+            self.response.write("&nbsp;Exit:"+exit.description+"("+exit.command+")"+"</br>")
 
-		self.response.headers['Content-Type'] = 'text/plain'
-		self.response.write('>> ' + self.request.get("name"))
+    def get(self):
+        command = self.request.get("command")
+        self.response.write('>> ' + command + "<br>")
 
-	def post(self):
-		user = users.get_current_user()
+        user = users.get_current_user() #is this supposed to be None?
 
-		self.response.headers['Content-Type'] = 'text/plain'
-		self.response.write('what up')
+        if None not in USERS:
+            #set up initial user
+            USERS[None] = home_base
+            current_location = home_base
+        else:
+            current_location = USERS[None]
+
+
+        self.request.current_location = current_location
+        user = users.get_current_user()
+        if command == "look":
+            self.look()
+        for exit in current_location.exits:
+            if command == exit.command:
+                self.response.write("Changing location")
+                USERS[None] = exit.target_loc
+                self.request.current_location = exit.target_loc
+                self.look()
+
+        self.response.headers['Content-Type'] = 'text/plain'
+
+    def post(self):
+        user = users.get_current_user()
+
+        self.response.headers['Content-Type'] = 'text/plain'
+        self.response.write('what up')
 
 class MainHandler(webapp2.RequestHandler):
-	def get(self):
-		user = users.get_current_user()
+    def get(self):
+        user = users.get_current_user()
 
-		if user:
-			self.response.headers['Content-Type'] = 'text/plain'
-			self.response.write('Hello, ' + user.nickname())
-		else:
-			template = JINJA_ENVIRONMENT.get_template('templates/landing.html')
-			self.response.write(template.render({}))
+        if user:
+            self.response.headers['Content-Type'] = 'text/plain'
+            self.response.write('Hello, ' + user.nickname())
+        else:
+            template = JINJA_ENVIRONMENT.get_template('templates/landing.html')
+            self.response.write(template.render({}))
 
 app = webapp2.WSGIApplication([
-('/test', TextRequestHandler),
-('/', MainHandler)
+    ('/test', TextRequestHandler),
+    ('/', MainHandler)
 ], debug=True)
