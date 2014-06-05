@@ -74,9 +74,16 @@ class TextRequestHandler(webapp2.RequestHandler):
 
     def get(self):
         command = self.request.get("command")
-        self.response.write('>> ' + command + "<br>")
+
 
         user = users.get_current_user() #is this supposed to be None?
+
+        if user is None:
+        	self.response.write('Please log in to continue...')
+        	self.response.headers['Content-Type'] = 'text/plain'
+        	return
+
+        self.response.write('>> ' + command + "<br>")
 
         if None not in USERS:
             #set up initial user
@@ -109,12 +116,8 @@ class MainHandler(webapp2.RequestHandler):
     def get(self):
         user = users.get_current_user()
 
-        if user:
-            self.response.headers['Content-Type'] = 'text/plain'
-            self.response.write('Hello, ' + user.nickname())
-        else:
-            template = JINJA_ENVIRONMENT.get_template('templates/landing.html')
-            self.response.write(template.render({}))
+        template = JINJA_ENVIRONMENT.get_template('templates/landing.html')
+        self.response.write(template.render({'login_url': users.create_login_url('/'), 'logout_url':users.create_logout_url('/'), 'current_user': user}))
 
 app = webapp2.WSGIApplication([
     ('/test', TextRequestHandler),
