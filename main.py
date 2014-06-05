@@ -22,66 +22,48 @@ import webapp2
 import jinja2
 import os
 from google.appengine.api import users
+from google.appengine.ext import ndb
+
+from models import Player, Location, Exit
 
 JINJA_ENVIRONMENT = jinja2.Environment(
     loader=jinja2.FileSystemLoader(os.path.dirname(__file__)))
 
 USERS = { } # user_id : location
 
-class Location(object):
-    def __init__(self, name, description=None):
-        self.name = name
-        if description:
-            self.description = description
-        else:
-            self.description = "This room is almost undescribable."
-        self.exits = []
 
-    def add_exit(self, exit):
-        self.exits.append(exit)
-
-class Exit(object):
-    def __init__(self, target_loc, command, description=None):
-        if not isinstance(target_loc, Location):
-            raise Exception("wrong type, needs to be Location")
-        self.target_loc = target_loc
-        if description:
-            self.description = "This doorway is nearly incomparable."
-        else:
-            self.description = description
-        self.command = command
-
-
-home_base = Location("Home Base", "This is your home")
-kitchen = Location("Your Kitchen", "This is where you cook your food")
-
-home_to_kitchen = Exit(kitchen, "go kitchen", "a plain doorway to the kitchen")
-home_base.add_exit(home_to_kitchen)
-
-kitchen_to_home = Exit(home_base, "go home", "a doorway leading to your home base")
-kitchen.add_exit(kitchen_to_home)
-
-
-LOCATION_MAP = [ home_base, kitchen]
 
 
 class TextRequestHandler(webapp2.RequestHandler):
     def look(self):
         self.response.write("Name: "+self.request.current_location.name+"</br>")
         self.response.write("Desc: "+self.request.current_location.description+"</br>")
-        for exit in self.request.current_location.exits:
-            self.response.write("&nbsp;Exit:"+exit.description+"("+exit.command+")"+"</br>")
+        exit = self.request.current_location.exits.get()
+        self.response.write("&nbsp;Exit:"+exit.description+"("+exit.command+")"+"</br>")
 
     def get(self):
+        location_key = ndb.Key('Location', 'HomeBase')
+        exit_key = ndb.Key('Exit', 'HomeBase')
+
+
+        # LOCATION_MAP = [ home_base, kitchen]
         command = self.request.get("command")
+
+        exit = Exit(name="exit", description="exit desc", command="go exit")
+        exit_key= exit.put()
+        home_base = Location(name="asd", description="DESC", exits=exit_key)
+        exit = exit_key.get()
+        home_key = home_base.put()
+        exit.target_loc = home_key
+        exit_key = exit.put()
 
 
         user = users.get_current_user() #is this supposed to be None?
 
         if user is None:
-        	self.response.write('Please log in to continue...')
-        	self.response.headers['Content-Type'] = 'text/plain'
-        	return
+            self.response.write('Please log in to continue...')
+            self.response.headers['Content-Type'] = 'text/plain'
+            return
 
         self.response.write('>> ' + command + "<br>")
 
@@ -92,17 +74,16 @@ class TextRequestHandler(webapp2.RequestHandler):
         else:
             current_location = USERS[None]
 
-
         self.request.current_location = current_location
         user = users.get_current_user()
         if command == "look":
             self.look()
-        for exit in current_location.exits:
-            if command == exit.command:
-                self.response.write("Changing location")
-                USERS[None] = exit.target_loc
-                self.request.current_location = exit.target_loc
-                self.look()
+        exit = current_location.exits.get()
+        if command == exit.command:
+            self.response.write("Changing location")
+            USERS[None] = exit.target_loc.get()
+            self.request.current_location = exit.target_loc.get()
+            self.look()
 
         self.response.headers['Content-Type'] = 'text/plain'
 
